@@ -57,7 +57,7 @@ STRIP_LAYOUT = (
     {
         'metric': 'temperature',
         'start_index': 170,
-        'end_index': LED_COUNT-1,
+        'end_index': LED_COUNT,
         'min_value': TEMP_MIN,
         'max_value': TEMP_MAX,
     },
@@ -224,6 +224,16 @@ def build_strip_metadata(color_config, layout=STRIP_LAYOUT):
     return metadata
 
 
+def attach_metric_ratios(strip_metadata, normalized_values):
+    for entry in strip_metadata:
+        metric_key = entry['metric']
+        normalized_value = clamp_color_value(normalized_values.get(metric_key, 0))
+        ratio = normalized_value / 255.0 if normalized_value else 0.0
+        entry['normalized_value'] = normalized_value
+        entry['ratio'] = ratio
+    return strip_metadata
+
+
 def build_gradient(start_color, end_color, steps):
     if steps <= 1:
         return [start_color]
@@ -367,7 +377,16 @@ if __name__ == '__main__' :
             'end_index': LED_COUNT,
             'base_color': (255, 0, 0),
             'end_color': (0, 0, 255),
+            'min_value': 0,
+            'max_value': 255,
         }]
+    cleaned_metric_values = {
+        'heart_rate': color_r,
+        'spo2': color_g,
+        'temperature': color_b,
+        'fallback': max(color_r, color_g, color_b),
+    }
+    strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values)
     primary_strip = strip_metadata[0]
     base_start_color = primary_strip['base_color']
     base_end_color = primary_strip['end_color']

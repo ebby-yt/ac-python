@@ -10,7 +10,7 @@
   - Introduce a lightweight structure (list of dicts or dataclass) describing each strip: metric name, LED slice indices, base color, end color.
   - Keep the data-driven table near the top of [complete/complete_v2.py](complete/complete_v2.py) so future strip additions only require edits in one place.
 
-- [ ] **Compute metric ratios**
+- [x] **Compute metric ratios**
   - Reuse the existing normalization logic (`clean_data`) to convert heart rate, SpO₂, and temperature into 0–255 values, then divide by 255 to obtain the ratio between MIN and MAX thresholds for each metric.
   - Store the ratios per metric so both the first and last LEDs can use the same derived value.
 
