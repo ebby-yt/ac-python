@@ -2,7 +2,7 @@
   - Save three `base_colors` and three `end_colors` entries (arrays of RGB triplets) inside [complete/color_config.json](complete/color_config.json).
   - Document the expected order (e.g., strip 1 = heart rate, strip 2 = SpO₂, strip 3 = temperature) to avoid ambiguity.
 
-- [ ] **Add validation helpers**
+- [x] **Add validation helpers**
   - Update the configuration loader in [complete/complete_v2.py](complete/complete_v2.py) to parse arrays of RGB tuples, clamp components, and fall back to safe defaults when entries are missing.
   - Log or print when defaults are used so misconfigurations are easy to spot on-device.
 

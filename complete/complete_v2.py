@@ -37,10 +37,19 @@ RYTH_MIN = 50
 RYTH_MAX = 110
 
 COLOR_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'color_config.json')
+SAFE_DEFAULT_CONFIG = {
+    'strip_order': ['heart_rate', 'spo2', 'temperature'],
+    'base_colors': [(255, 0, 0), (0, 128, 255), (255, 140, 0)],
+    'end_colors': [(255, 200, 200), (0, 255, 255), (255, 255, 0)],
+}
 
 
 def clamp_color_value(value):
-    return max(0, min(255, int(value)))
+    try:
+        numeric_value = int(value)
+    except (TypeError, ValueError):
+        numeric_value = 0
+    return max(0, min(255, numeric_value))
 
 
 def parse_color(data, fallback):
@@ -49,17 +58,77 @@ def parse_color(data, fallback):
     return fallback
 
 
-def load_color_config(config_path=COLOR_CONFIG_PATH):
-    default_start = (255, 0, 0)
-    default_end = (0, 0, 255)
+def log_color_config_issue(message):
+    print(f"[color-config] {message}")
+
+
+def _load_default_payload(config_path):
     try:
         with open(config_path, 'r', encoding='utf-8') as config_file:
             payload = json.load(config_file)
-    except (OSError, ValueError):
-        return default_start, default_end
-    start_color = parse_color(payload.get('start_color'), default_start)
-    end_color = parse_color(payload.get('end_color'), default_end)
-    return start_color, end_color
+            if isinstance(payload, dict):
+                return payload
+            log_color_config_issue('Malformed color_config.json payload; using safe defaults.')
+    except (OSError, ValueError) as error:
+        log_color_config_issue(f"Failed to read {config_path}: {error}. Using safe defaults.")
+    return {
+        'strip_order': list(SAFE_DEFAULT_CONFIG['strip_order']),
+        'base_colors': [tuple(color) for color in SAFE_DEFAULT_CONFIG['base_colors']],
+        'end_colors': [tuple(color) for color in SAFE_DEFAULT_CONFIG['end_colors']],
+    }
+
+
+def _parse_strip_order(raw_order, fallback):
+    if isinstance(raw_order, list) and raw_order and all(isinstance(item, str) and item for item in raw_order):
+        return raw_order
+    log_color_config_issue('strip_order missing or invalid; using defaults.')
+    return list(fallback)
+
+
+def _parse_color_entries(raw_colors, fallback, label):
+    expected_length = len(fallback)
+    if not isinstance(raw_colors, list):
+        log_color_config_issue(f"{label} missing or invalid; using defaults.")
+        return [tuple(color) for color in fallback]
+    resolved = []
+    for index in range(expected_length):
+        if index >= len(raw_colors):
+            log_color_config_issue(f"{label}[{index}] missing; default {fallback[index]} applied.")
+            resolved.append(tuple(fallback[index]))
+            continue
+        resolved.append(_parse_single_color(raw_colors[index], fallback[index], label, index))
+    if len(raw_colors) > expected_length:
+        log_color_config_issue(
+            f"{label} contains {len(raw_colors) - expected_length} extra entries; ignoring extras."
+        )
+    return resolved
+
+
+def _parse_single_color(candidate, fallback, label, index):
+    if not isinstance(candidate, (list, tuple)) or len(candidate) != 3:
+        log_color_config_issue(f"{label}[{index}] invalid; default {fallback} applied.")
+        return tuple(fallback)
+    return parse_color(candidate, fallback)
+
+
+def load_color_config(config_path=COLOR_CONFIG_PATH):
+    defaults = _load_default_payload(config_path)
+    payload = defaults
+    try:
+        with open(config_path, 'r', encoding='utf-8') as config_file:
+            maybe_payload = json.load(config_file)
+            if isinstance(maybe_payload, dict):
+                payload = maybe_payload
+            else:
+                log_color_config_issue('color_config.json is not a JSON object; reusing defaults from file.')
+    except (OSError, ValueError) as error:
+        log_color_config_issue(f"Failed to read {config_path}: {error}. Reusing defaults from file.")
+
+    return {
+        'strip_order': _parse_strip_order(payload.get('strip_order'), defaults['strip_order']),
+        'base_colors': _parse_color_entries(payload.get('base_colors'), defaults['base_colors'], 'base_colors'),
+        'end_colors': _parse_color_entries(payload.get('end_colors'), defaults['end_colors'], 'end_colors'),
+    }
 
 
 def build_gradient(start_color, end_color, steps):
@@ -195,7 +264,9 @@ if __name__ == '__main__' :
 
     # Fill the strip with new colors
     print("Displaying")
-    base_start_color, base_end_color = load_color_config()
+    color_config = load_color_config()
+    base_start_color = color_config['base_colors'][0]
+    base_end_color = color_config['end_colors'][0]
     max_clean_value = max(color_r, color_g, color_b)
     intensity_factor = max_clean_value / 255.0 if max_clean_value else 1.0
     start_color = scale_color(base_start_color, intensity_factor)
