@@ -1,4 +1,4 @@
-- [ ] **Extend color_config schema**
+- [x] **Extend color_config schema**
   - Save three `base_colors` and three `end_colors` entries (arrays of RGB triplets) inside [complete/color_config.json](complete/color_config.json).
   - Document the expected order (e.g., strip 1 = heart rate, strip 2 = SpO₂, strip 3 = temperature) to avoid ambiguity.
 
