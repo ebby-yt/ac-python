@@ -254,6 +254,23 @@ def build_gradient(start_color, end_color, steps):
 def scale_color(color, factor):
     return tuple(clamp_color_value(channel * factor) for channel in color)
 
+
+def render_strip_segments(strip, metadata, wait_ms=0):
+    for entry in metadata:
+        start_index = entry['start_index']
+        end_index = entry['end_index']
+        segment_length = max(0, end_index - start_index)
+        if segment_length <= 0:
+            continue
+        ratio = entry.get('ratio', 0)
+        target_end_color = scale_color(entry['end_color'], ratio)
+        gradient = build_gradient(entry['base_color'], target_end_color, segment_length)
+        for offset, (red_channel, green_channel, blue_channel) in enumerate(gradient):
+            strip.setPixelColor(start_index + offset, Color(red_channel, green_channel, blue_channel))
+    strip.show()
+    if wait_ms:
+        time.sleep(wait_ms / 1000.0)
+
 def read_temp_raw():
     f = open(device_file, 'r')
     lines = f.readlines()
@@ -387,12 +404,5 @@ if __name__ == '__main__' :
         'fallback': max(color_r, color_g, color_b),
     }
     strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values)
-    primary_strip = strip_metadata[0]
-    base_start_color = primary_strip['base_color']
-    base_end_color = primary_strip['end_color']
-    max_clean_value = max(color_r, color_g, color_b)
-    intensity_factor = max_clean_value / 255.0 if max_clean_value else 1.0
-    start_color = scale_color(base_start_color, intensity_factor)
-    end_color = scale_color(base_end_color, intensity_factor)
-    betterColorWipe(strip, start_color, end_color)
+    render_strip_segments(strip, strip_metadata)
     time.sleep(1)

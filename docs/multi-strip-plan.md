@@ -14,7 +14,7 @@
   - Reuse the existing normalization logic (`clean_data`) to convert heart rate, SpO₂, and temperature into 0–255 values, then divide by 255 to obtain the ratio between MIN and MAX thresholds for each metric.
   - Store the ratios per metric so both the first and last LEDs can use the same derived value.
 
-- [ ] **Render strips independently**
+- [x] **Render strips independently**
   - Create `betterColorWipe` variants that accept a LED index range plus the corresponding base/end colors.
   - For each strip, set pixel 0 to its base color, pixel `n-1` to `lerp(end_color, ratio)`, and interpolate all intermediate LEDs across the full gradient span.
   - Ensure each strip updates without blocking the others (reuse the same wait time or allow per-strip overrides).
