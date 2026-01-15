@@ -6,7 +6,7 @@
   - Update the configuration loader in [complete/complete_v2.py](complete/complete_v2.py) to parse arrays of RGB tuples, clamp components, and fall back to safe defaults when entries are missing.
   - Log or print when defaults are used so misconfigurations are easy to spot on-device.
 
-- [ ] **Represent strip metadata**
+- [x] **Represent strip metadata**
   - Introduce a lightweight structure (list of dicts or dataclass) describing each strip: metric name, LED slice indices, base color, end color.
   - Keep the data-driven table near the top of [complete/complete_v2.py](complete/complete_v2.py) so future strip additions only require edits in one place.
 

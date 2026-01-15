@@ -36,6 +36,33 @@ SPO2_MAX = 100
 RYTH_MIN = 50
 RYTH_MAX = 110
 
+# Targeted slices for the three planned metrics, aligned with their sensor thresholds.
+# Index ranges are inclusive of start and exclusive of end so each strip owns a contiguous
+# segment of the 256 LEDs.
+STRIP_LAYOUT = (
+    {
+        'metric': 'heart_rate',
+        'start_index': 0,
+        'end_index': 85,
+        'min_value': RYTH_MIN,
+        'max_value': RYTH_MAX,
+    },
+    {
+        'metric': 'spo2',
+        'start_index': 85,
+        'end_index': 170,
+        'min_value': SPO2_MIN,
+        'max_value': SPO2_MAX,
+    },
+    {
+        'metric': 'temperature',
+        'start_index': 170,
+        'end_index': LED_COUNT-1,
+        'min_value': TEMP_MIN,
+        'max_value': TEMP_MAX,
+    },
+)
+
 COLOR_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'color_config.json')
 SAFE_DEFAULT_CONFIG = {
     'strip_order': ['heart_rate', 'spo2', 'temperature'],
@@ -129,6 +156,72 @@ def load_color_config(config_path=COLOR_CONFIG_PATH):
         'base_colors': _parse_color_entries(payload.get('base_colors'), defaults['base_colors'], 'base_colors'),
         'end_colors': _parse_color_entries(payload.get('end_colors'), defaults['end_colors'], 'end_colors'),
     }
+
+
+def _coerce_index(value, fallback):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _sanitize_slice_bounds(slice_candidate):
+    start_index = _coerce_index(slice_candidate.get('start_index', 0), 0)
+    end_index = _coerce_index(slice_candidate.get('end_index', LED_COUNT), LED_COUNT)
+    start_index = max(0, min(LED_COUNT, start_index))
+    end_index = max(start_index + 1, min(LED_COUNT, end_index))
+    return start_index, end_index
+
+
+def _sanitize_metric_range(slice_candidate, fallback_min=0, fallback_max=255):
+    try:
+        min_value = float(slice_candidate.get('min_value', fallback_min))
+    except (TypeError, ValueError):
+        min_value = float(fallback_min)
+    try:
+        max_value = float(slice_candidate.get('max_value', fallback_max))
+    except (TypeError, ValueError):
+        max_value = float(fallback_max)
+    if min_value >= max_value:
+        log_color_config_issue('Invalid metric range; reverting to defaults.')
+        return float(fallback_min), float(fallback_max)
+    return min_value, max_value
+
+
+def _resolve_color_entry(entries, index, label):
+    if not entries:
+        log_color_config_issue(f"{label} missing entirely; defaulting to black.")
+        return (0, 0, 0)
+    if index >= len(entries):
+        log_color_config_issue(f"{label}[{index}] missing; using last available entry.")
+        return tuple(entries[-1])
+    return tuple(entries[index])
+
+
+def build_strip_metadata(color_config, layout=STRIP_LAYOUT):
+    layout_lookup = {entry['metric']: entry for entry in layout}
+    metadata = []
+    fallback_slice = {'start_index': 0, 'end_index': LED_COUNT, 'min_value': 0, 'max_value': 255}
+    for index, metric in enumerate(color_config['strip_order']):
+        slice_candidate = layout_lookup.get(metric)
+        if slice_candidate is None:
+            log_color_config_issue(f"No strip layout defined for {metric}; defaulting to full strip.")
+            slice_candidate = fallback_slice
+        start_index, end_index = _sanitize_slice_bounds(slice_candidate)
+        min_value, max_value = _sanitize_metric_range(slice_candidate, fallback_slice['min_value'], fallback_slice['max_value'])
+        if start_index >= end_index:
+            log_color_config_issue(f"Invalid slice for {metric}; forcing at least one LED.")
+            end_index = min(LED_COUNT, start_index + 1)
+        metadata.append({
+            'metric': metric,
+            'start_index': start_index,
+            'end_index': end_index,
+            'min_value': min_value,
+            'max_value': max_value,
+            'base_color': _resolve_color_entry(color_config['base_colors'], index, 'base_colors'),
+            'end_color': _resolve_color_entry(color_config['end_colors'], index, 'end_colors'),
+        })
+    return metadata
 
 
 def build_gradient(start_color, end_color, steps):
@@ -265,8 +358,19 @@ if __name__ == '__main__' :
     # Fill the strip with new colors
     print("Displaying")
     color_config = load_color_config()
-    base_start_color = color_config['base_colors'][0]
-    base_end_color = color_config['end_colors'][0]
+    strip_metadata = build_strip_metadata(color_config)
+    if not strip_metadata:
+        log_color_config_issue('No strip metadata resolved; falling back to defaults.')
+        strip_metadata = [{
+            'metric': 'fallback',
+            'start_index': 0,
+            'end_index': LED_COUNT,
+            'base_color': (255, 0, 0),
+            'end_color': (0, 0, 255),
+        }]
+    primary_strip = strip_metadata[0]
+    base_start_color = primary_strip['base_color']
+    base_end_color = primary_strip['end_color']
     max_clean_value = max(color_r, color_g, color_b)
     intensity_factor = max_clean_value / 255.0 if max_clean_value else 1.0
     start_color = scale_color(base_start_color, intensity_factor)
