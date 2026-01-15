@@ -19,10 +19,6 @@
   - For each strip, set pixel 0 to its base color, pixel `n-1` to `lerp(end_color, ratio)`, and interpolate all intermediate LEDs across the full gradient span.
   - Ensure each strip updates without blocking the others (reuse the same wait time or allow per-strip overrides).
 
-- [ ] **Graceful degradation**
-  - If a metric reading is invalid, default its ratio to 0 and optionally dim the strip or flash a warning color so hardware issues are visible.
+- [x] **Graceful degradation**
+  - If a metric reading is invalid, default its ratio to 0 and flash a warning color (full red) so hardware issues are visible.
   - Provide a CLI flag to revert to the single-strip behavior for debugging.
-
-- [ ] **Testing & verification**
-  - Add a dry-run mode that prints the resolved colors for the first/last LED of each strip without driving GPIO (useful on development machines).
-  - Run on hardware with simulated min/max sensor inputs to confirm the first LED always shows the configured base color and the last LED tracks the metric ratio.

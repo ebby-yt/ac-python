@@ -25,6 +25,7 @@ LED_DMA        = 10      # DMA channel to use for generating a signal (try 10)
 LED_BRIGHTNESS = 65      # Set to 0 for darkest and 255 for brightest
 LED_INVERT     = False   # True to invert the signal (when using NPN transistor level shift)
 LED_CHANNEL    = 0       # set to '1' for GPIOs 13, 19, 41, 45 or 53
+WARNING_COLOR  = (255, 0, 0)
 
 # MIN/MAX values initalization
 TEMP_MIN = 0
@@ -69,6 +70,16 @@ SAFE_DEFAULT_CONFIG = {
     'base_colors': [(255, 0, 0), (0, 128, 255), (255, 140, 0)],
     'end_colors': [(255, 200, 200), (0, 255, 255), (255, 255, 0)],
 }
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Drive multi-strip wearable gradients.')
+    parser.add_argument(
+        '--single-strip',
+        action='store_true',
+        help='Render the full LED array as a single gradient (legacy behavior).',
+    )
+    return parser.parse_args()
 
 
 def clamp_color_value(value):
@@ -224,13 +235,16 @@ def build_strip_metadata(color_config, layout=STRIP_LAYOUT):
     return metadata
 
 
-def attach_metric_ratios(strip_metadata, normalized_values):
+def attach_metric_ratios(strip_metadata, normalized_values, validity_map=None):
+    validity_map = validity_map or {}
     for entry in strip_metadata:
         metric_key = entry['metric']
-        normalized_value = clamp_color_value(normalized_values.get(metric_key, 0))
+        is_valid = bool(validity_map.get(metric_key, True))
+        normalized_value = clamp_color_value(normalized_values.get(metric_key, 0)) if is_valid else 0
         ratio = normalized_value / 255.0 if normalized_value else 0.0
         entry['normalized_value'] = normalized_value
         entry['ratio'] = ratio
+        entry['valid'] = is_valid
     return strip_metadata
 
 
@@ -256,20 +270,38 @@ def scale_color(color, factor):
 
 
 def render_strip_segments(strip, metadata, wait_ms=0):
+    warning_active = int(time.time() * 2) % 2 == 0
     for entry in metadata:
         start_index = entry['start_index']
         end_index = entry['end_index']
         segment_length = max(0, end_index - start_index)
         if segment_length <= 0:
             continue
-        ratio = entry.get('ratio', 0)
-        target_end_color = scale_color(entry['end_color'], ratio)
-        gradient = build_gradient(entry['base_color'], target_end_color, segment_length)
+        if not entry.get('valid', True):
+            warning_color = WARNING_COLOR if warning_active else (0, 0, 0)
+            gradient = [warning_color] * segment_length
+        else:
+            ratio = entry.get('ratio', 0)
+            target_end_color = scale_color(entry['end_color'], ratio)
+            gradient = build_gradient(entry['base_color'], target_end_color, segment_length)
         for offset, (red_channel, green_channel, blue_channel) in enumerate(gradient):
             strip.setPixelColor(start_index + offset, Color(red_channel, green_channel, blue_channel))
     strip.show()
     if wait_ms:
         time.sleep(wait_ms / 1000.0)
+
+
+def render_single_strip(strip, metadata, cleaned_values):
+    if not metadata:
+        return
+    primary_strip = metadata[0]
+    base_start_color = primary_strip['base_color']
+    base_end_color = primary_strip['end_color']
+    max_clean_value = max(cleaned_values.values()) if cleaned_values else 0
+    intensity_factor = max_clean_value / 255.0 if max_clean_value else 1.0
+    start_color = scale_color(base_start_color, intensity_factor)
+    end_color = scale_color(base_end_color, intensity_factor)
+    betterColorWipe(strip, start_color, end_color)
 
 def read_temp_raw():
     f = open(device_file, 'r')
@@ -350,6 +382,7 @@ def clean_data(raw_r, raw_g, raw_b, clean_r, clean_g, clean_b):
     return clean_r, clean_g, clean_b
 
 if __name__ == '__main__' :
+    args = parse_args()
     # MAX30102 initialization
     m = max30102.MAX30102()
     # LED strip initialization
@@ -361,6 +394,9 @@ if __name__ == '__main__' :
 
     print("Reading temp")
     raw_b = read_temp()
+    temp_valid = raw_b is not None
+    if not temp_valid:
+        raw_b = TEMP_MIN
     print("SPO2 and HR")
     print("Reading sequential data")
 
@@ -403,6 +439,15 @@ if __name__ == '__main__' :
         'temperature': color_b,
         'fallback': max(color_r, color_g, color_b),
     }
-    strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values)
-    render_strip_segments(strip, strip_metadata)
+    metric_validity = {
+        'heart_rate': hr_valid,
+        'spo2': spo2_valid,
+        'temperature': temp_valid,
+        'fallback': True,
+    }
+    strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values, metric_validity)
+    if args.single_strip:
+        render_single_strip(strip, strip_metadata, cleaned_metric_values)
+    else:
+        render_strip_segments(strip, strip_metadata)
     time.sleep(1)
