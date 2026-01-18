@@ -381,6 +381,29 @@ def clean_data(raw_r, raw_g, raw_b, clean_r, clean_g, clean_b):
 
     return clean_r, clean_g, clean_b
 
+
+def reset_sensor_fifo(sensor):
+    reset_fn = getattr(sensor, 'reset_fifo', None)
+    if callable(reset_fn):
+        reset_fn()
+
+
+def acquire_sensor_samples(sensor, retries=3, settle_delay=0.15):
+    for attempt in range(1, retries + 1):
+        reset_sensor_fifo(sensor)
+        time.sleep(settle_delay)
+        try:
+            red, ir = sensor.read_sequential()
+        except OSError as error:
+            print(f"[max30102] Sequential read failed (attempt {attempt}/{retries}): {error}")
+            time.sleep(settle_delay)
+            continue
+        if red and ir:
+            return red, ir
+        print(f"[max30102] Empty sequential batch (attempt {attempt}/{retries}); retrying.")
+        time.sleep(settle_delay)
+    return None, None
+
 if __name__ == '__main__':
     args = parse_args()
     # MAX30102 initialization
@@ -403,10 +426,12 @@ if __name__ == '__main__':
             print("SPO2 and HR")
             print("Reading sequential data")
 
-            # Read data from the sensor
-            red, ir = m.read_sequential()
+            red, ir = acquire_sensor_samples(m)
+            if red is None or ir is None:
+                print("[max30102] Unable to fetch sequential data; skipping iteration.")
+                time.sleep(2)
+                continue
 
-            # Calculate heart rate and SpO2
             print("Calculating HR & SPO2")
             hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
 
