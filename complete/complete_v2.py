@@ -431,7 +431,7 @@ def acquire_sensor_samples(sensor, retries=3, settle_delay=0.15):
 
 if __name__ == '__main__':
     args = parse_args()
-    m = initialize_sensor()
+    m = None
     # LED strip initialization
     strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     # Intialize the library (must be called once before other functions).
@@ -441,12 +441,11 @@ if __name__ == '__main__':
         while True:
             raw_r, raw_g, raw_b = 0, 0, 0
             color_r, color_g, color_b = 0, 0, 0
+            m = initialize_sensor()
             if m is None:
-                m = initialize_sensor()
-                if m is None:
-                    print("[max30102] Sensor unavailable; delaying next attempt.")
-                    time.sleep(2)
-                    continue
+                print("[max30102] Sensor unavailable; delaying next attempt.")
+                time.sleep(2)
+                continue
 
             print("Reading temp")
             raw_b = read_temp()
@@ -457,8 +456,7 @@ if __name__ == '__main__':
             print("Reading sequential data")
             red, ir = acquire_sensor_samples(m)
             if red is None or ir is None:
-                print("[max30102] Unable to fetch sequential data; sensor will be reinitialized next loop.")
-                m = None
+                print("[max30102] Unable to fetch sequential data; retrying after full reinit.")
                 time.sleep(2)
                 continue
 
@@ -507,6 +505,7 @@ if __name__ == '__main__':
                 render_single_strip(strip, strip_metadata, cleaned_metric_values)
             else:
                 render_strip_segments(strip, strip_metadata)
+            m = None
             time.sleep(2)
     except KeyboardInterrupt:
         print("Loop interrupted; exiting.")
