@@ -7,6 +7,7 @@ import hrcalc
 from rpi_ws281x import Adafruit_NeoPixel, Color
 import argparse
 import smbus
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 # KS0023 initalization
 os.system('modprobe w1-gpio')
@@ -26,6 +27,8 @@ LED_BRIGHTNESS = 65      # Set to 0 for darkest and 255 for brightest
 LED_INVERT     = False   # True to invert the signal (when using NPN transistor level shift)
 LED_CHANNEL    = 0       # set to '1' for GPIOs 13, 19, 41, 45 or 53
 WARNING_COLOR  = (255, 0, 0)
+SENSOR_READ_TIMEOUT = 5.0
+_SENSOR_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 
 # MIN/MAX values initalization
 TEMP_MIN = 0
@@ -382,6 +385,25 @@ def clean_data(raw_r, raw_g, raw_b, clean_r, clean_g, clean_b):
     return clean_r, clean_g, clean_b
 
 
+def shutdown_sensor_executor():
+    global _SENSOR_EXECUTOR
+    if _SENSOR_EXECUTOR:
+        _SENSOR_EXECUTOR.shutdown(wait=False)
+        _SENSOR_EXECUTOR = None
+
+def fetch_sequential_with_timeout(sensor, timeout=SENSOR_READ_TIMEOUT):
+    if _SENSOR_EXECUTOR is None:
+        return None, None
+    future = _SENSOR_EXECUTOR.submit(sensor.read_sequential)
+    try:
+        return future.result(timeout=timeout)
+    except TimeoutError:
+        future.cancel()
+        print(f"[max30102] Sequential read timed out after {timeout}s.")
+    except OSError as error:
+        print(f"[max30102] Sequential read raised OSError: {error}")
+    return None, None
+
 def reset_sensor_fifo(sensor):
     reset_fn = getattr(sensor, 'reset_fifo', None)
     if callable(reset_fn):
@@ -392,15 +414,10 @@ def acquire_sensor_samples(sensor, retries=3, settle_delay=0.15):
     for attempt in range(1, retries + 1):
         reset_sensor_fifo(sensor)
         time.sleep(settle_delay)
-        try:
-            red, ir = sensor.read_sequential()
-        except OSError as error:
-            print(f"[max30102] Sequential read failed (attempt {attempt}/{retries}): {error}")
-            time.sleep(settle_delay)
-            continue
+        red, ir = fetch_sequential_with_timeout(sensor)
         if red and ir:
             return red, ir
-        print(f"[max30102] Empty sequential batch (attempt {attempt}/{retries}); retrying.")
+        print(f"[max30102] Empty or timed-out sequential batch (attempt {attempt}/{retries}); retrying.")
         time.sleep(settle_delay)
     return None, None
 
@@ -428,7 +445,11 @@ if __name__ == '__main__':
 
             red, ir = acquire_sensor_samples(m)
             if red is None or ir is None:
-                print("[max30102] Unable to fetch sequential data; skipping iteration.")
+                print("[max30102] Unable to fetch sequential data; attempting sensor reinit.")
+                try:
+                    m = max30102.MAX30102()
+                except Exception as error:
+                    print(f"[max30102] Sensor reinit failed: {error}")
                 time.sleep(2)
                 continue
 
@@ -480,3 +501,5 @@ if __name__ == '__main__':
             time.sleep(2)
     except KeyboardInterrupt:
         print("Loop interrupted; exiting.")
+    finally:
+        shutdown_sensor_executor()
