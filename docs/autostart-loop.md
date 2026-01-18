@@ -59,4 +59,41 @@ journalctl -u ac-wearable.service -f
 - To stop the LEDs temporarily without cutting power: `sudo systemctl stop ac-wearable.service`.
 - On shutdown or power loss the service halts automatically; it resumes on the next boot without manual intervention.
 
+## 5. Troubleshooting
+
+### `ModuleNotFoundError: No module named 'smbus'`
+
+- Install the missing dependency (and handy tooling) on Raspberry Pi OS:
+  ```bash
+  sudo apt update
+  sudo apt install -y python3-smbus i2c-tools
+  ```
+- Re-enable the I²C kernel driver if it was never configured:
+  ```bash
+  sudo raspi-config nonint do_i2c 0
+  sudo reboot
+  ```
+- After reboot, rerun `complete/complete_v2.py`; the import should succeed because `python3-smbus` ships the required bindings.
+
+### `ModuleNotFoundError: No module named 'numpy'`
+
+- Install the packaged dependency:
+  ```bash
+  sudo apt update
+  sudo apt install -y python3-numpy
+  ```
+- If you run inside a virtualenv that lacks system packages, add it there too:
+  ```bash
+  source /home/pi/.venvs/ac/bin/activate
+  pip install numpy
+  ```
+- Sanity-check before relaunching the loop:
+  ```bash
+  python - <<'PY'
+  import numpy
+  print("numpy", numpy.__version__)
+  PY
+  ```
+- Once the import succeeds, re-run `complete/complete_v2.py` (or restart the service) and the `hrcalc` dependency chain will load correctly.
+
 Following these steps gives you an auto-launched, self-restarting loop that matches the “run forever until power disappears” requirement.

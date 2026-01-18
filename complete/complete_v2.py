@@ -381,7 +381,7 @@ def clean_data(raw_r, raw_g, raw_b, clean_r, clean_g, clean_b):
 
     return clean_r, clean_g, clean_b
 
-if __name__ == '__main__' :
+if __name__ == '__main__':
     args = parse_args()
     # MAX30102 initialization
     m = max30102.MAX30102()
@@ -389,65 +389,69 @@ if __name__ == '__main__' :
     strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
     # Intialize the library (must be called once before other functions).
     strip.begin()
-    raw_r, raw_g, raw_b = 0, 0, 0
-    color_r, color_b, color_g = 0, 0, 0
-
-    print("Reading temp")
-    raw_b = read_temp()
-    temp_valid = raw_b is not None
-    if not temp_valid:
-        raw_b = TEMP_MIN
-    print("SPO2 and HR")
-    print("Reading sequential data")
-
-    # Read data from the sensor
-    red, ir = m.read_sequential()
-
-    # Calculate heart rate and SpO2
-    print("Calculating HR & SPO2")
-    hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
-
-    # Check if valid readings are obtained
-    if hr_valid :
-        raw_r = hr
-    if spo2_valid :
-        raw_g = spo2
-
-    # Clean raw data
-    print("Cleaning data")
-    color_r, color_g, color_b = clean_data(raw_r, raw_g, raw_b, color_r, color_g, color_b)
-    print((color_r, color_g, color_b))
-
-    # Fill the strip with new colors
-    print("Displaying")
     color_config = load_color_config()
-    strip_metadata = build_strip_metadata(color_config)
-    if not strip_metadata:
-        log_color_config_issue('No strip metadata resolved; falling back to defaults.')
-        strip_metadata = [{
-            'metric': 'fallback',
-            'start_index': 0,
-            'end_index': LED_COUNT,
-            'base_color': (255, 0, 0),
-            'end_color': (0, 0, 255),
-            'min_value': 0,
-            'max_value': 255,
-        }]
-    cleaned_metric_values = {
-        'heart_rate': color_r,
-        'spo2': color_g,
-        'temperature': color_b,
-        'fallback': max(color_r, color_g, color_b),
-    }
-    metric_validity = {
-        'heart_rate': hr_valid,
-        'spo2': spo2_valid,
-        'temperature': temp_valid,
-        'fallback': True,
-    }
-    strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values, metric_validity)
-    if args.single_strip:
-        render_single_strip(strip, strip_metadata, cleaned_metric_values)
-    else:
-        render_strip_segments(strip, strip_metadata)
-    time.sleep(1)
+    try:
+        while True:
+            raw_r, raw_g, raw_b = 0, 0, 0
+            color_r, color_g, color_b = 0, 0, 0
+
+            print("Reading temp")
+            raw_b = read_temp()
+            temp_valid = raw_b is not None
+            if not temp_valid:
+                raw_b = TEMP_MIN
+            print("SPO2 and HR")
+            print("Reading sequential data")
+
+            # Read data from the sensor
+            red, ir = m.read_sequential()
+
+            # Calculate heart rate and SpO2
+            print("Calculating HR & SPO2")
+            hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
+
+            # Check if valid readings are obtained
+            if hr_valid :
+                raw_r = hr
+            if spo2_valid :
+                raw_g = spo2
+
+            # Clean raw data
+            print("Cleaning data")
+            color_r, color_g, color_b = clean_data(raw_r, raw_g, raw_b, color_r, color_g, color_b)
+            print((color_r, color_g, color_b))
+
+            # Fill the strip with new colors
+            print("Displaying")
+            strip_metadata = build_strip_metadata(color_config)
+            if not strip_metadata:
+                log_color_config_issue('No strip metadata resolved; falling back to defaults.')
+                strip_metadata = [{
+                    'metric': 'fallback',
+                    'start_index': 0,
+                    'end_index': LED_COUNT,
+                    'base_color': (255, 0, 0),
+                    'end_color': (0, 0, 255),
+                    'min_value': 0,
+                    'max_value': 255,
+                }]
+            cleaned_metric_values = {
+                'heart_rate': color_r,
+                'spo2': color_g,
+                'temperature': color_b,
+                'fallback': max(color_r, color_g, color_b),
+            }
+            metric_validity = {
+                'heart_rate': hr_valid,
+                'spo2': spo2_valid,
+                'temperature': temp_valid,
+                'fallback': True,
+            }
+            strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values, metric_validity)
+            if args.single_strip:
+                render_single_strip(strip, strip_metadata, cleaned_metric_values)
+            else:
+                render_strip_segments(strip, strip_metadata)
+            time.sleep(2)
+    except KeyboardInterrupt:
+        print("Loop interrupted; exiting.")

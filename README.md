@@ -61,7 +61,15 @@ This project contains Python scripts and modules for working with various sensor
      ```
    - On Linux/macOS:
      ```bash
+     python3 -m venv .env --copies
      source .env/bin/activate
+
+     # Sanity check with :
+     python -c "import sys; print(sys.executable)"
+
+     # Reinstall dependencies
+     python -m pip install --upgrade pip setuptools wheel
+     python -m pip install -r requirements.txt
      ```
 3. **Install dependencies** (if not already present):
    ```bash
