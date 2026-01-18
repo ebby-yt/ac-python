@@ -429,6 +429,12 @@ def acquire_sensor_samples(sensor, retries=3, settle_delay=0.15):
         time.sleep(settle_delay)
     return None, None
 
+
+def _is_zero_batch(red_samples, ir_samples):
+    if not red_samples or not ir_samples:
+        return False
+    return all(sample == 0 for sample in red_samples) and all(sample == 0 for sample in ir_samples)
+
 if __name__ == '__main__':
     args = parse_args()
     m = None
@@ -437,6 +443,10 @@ if __name__ == '__main__':
     # Intialize the library (must be called once before other functions).
     strip.begin()
     color_config = load_color_config()
+    prev_hr_value = 0
+    prev_spo2_value = 0
+    prev_hr_valid = False
+    prev_spo2_valid = False
     try:
         while True:
             raw_r, raw_g, raw_b = 0, 0, 0
@@ -460,13 +470,27 @@ if __name__ == '__main__':
                 time.sleep(2)
                 continue
 
-            print("Calculating HR & SPO2")
-            hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
+            if _is_zero_batch(red, ir):
+                print("[max30102] Sequential batch was zeroed; reusing cached HR/SpO2.")
+                if not (prev_hr_valid or prev_spo2_valid):
+                    print("[max30102] No cached HR/SpO2 available; waiting for next cycle.")
+                    time.sleep(2)
+                    continue
+                hr, hr_valid = prev_hr_value, prev_hr_valid
+                spo2, spo2_valid = prev_spo2_value, prev_spo2_valid
+            else:
+                print("Calculating HR & SPO2")
+                hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
+                if hr_valid:
+                    prev_hr_value = hr
+                    prev_hr_valid = True
+                if spo2_valid:
+                    prev_spo2_value = spo2
+                    prev_spo2_valid = True
 
-            # Check if valid readings are obtained
-            if hr_valid :
+            if hr_valid:
                 raw_r = hr
-            if spo2_valid :
+            if spo2_valid:
                 raw_g = spo2
 
             # Clean raw data
