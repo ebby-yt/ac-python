@@ -274,13 +274,16 @@ def scale_color(color, factor):
 
 def render_strip_segments(strip, metadata, wait_ms=0):
     warning_active = int(time.time() * 2) % 2 == 0
-    for entry in metadata:
+    for block_index, entry in enumerate(metadata):
         start_index = entry['start_index']
         end_index = entry['end_index']
         segment_length = max(0, end_index - start_index)
         if segment_length <= 0:
             continue
         if not entry.get('valid', True):
+            print(
+                f"[display] Block {block_index + 1} ({entry['metric']}) invalid; defaulting to warning red."
+            )
             warning_color = WARNING_COLOR if warning_active else (0, 0, 0)
             gradient = [warning_color] * segment_length
         else:

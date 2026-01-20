@@ -7,12 +7,12 @@
   "order_note": "Entries in base_colors and end_colors follow this order (strip 1 = heart_rate, strip 2 = spo2, strip 3 = temperature).",
   "base_colors": [
     [255, 0, 0],
-    [0, 128, 255],
-    [255, 140, 0]
+    [0, 255, 0],
+    [0, 0, 255]
   ],
   "end_colors": [
-    [255, 200, 200],
-    [0, 255, 255],
-    [255, 255, 0]
+    [255, 255, 255],
+    [255, 255, 255],
+    [255, 255, 255]
   ]
 }
