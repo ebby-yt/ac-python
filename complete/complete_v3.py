@@ -6,7 +6,16 @@ import max30102
 import hrcalc
 from rpi_ws281x import Adafruit_NeoPixel, Color
 import argparse
-import smbus
+try:
+    import smbus
+except ModuleNotFoundError:
+    try:
+        import smbus2 as smbus
+        print("[deps] smbus unavailable; using smbus2 fallback.")
+    except ModuleNotFoundError as import_error:
+        raise ModuleNotFoundError(
+            "smbus missing. Install via 'sudo apt install -y python3-smbus' or run 'pip install smbus2' inside your virtualenv."
+        ) from import_error
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 # KS0023 initalization
@@ -596,9 +605,13 @@ if __name__ == '__main__':
     prev_spo2_value = 0
     prev_hr_valid = False
     prev_spo2_valid = False
-    prev_alert_active = False
     try:
         while True:
+            sequential_error = False
+            hr = None
+            spo2 = None
+            hr_valid = False
+            spo2_valid = False
             raw_r, raw_g, raw_b = 0, 0, 0
             color_r, color_g, color_b = 0, 0, 0
             m = initialize_sensor()
@@ -615,28 +628,28 @@ if __name__ == '__main__':
             print("Reading sequential data")
             red, ir = acquire_sensor_samples(m)
             if red is None or ir is None:
-                print("[max30102] Unable to fetch sequential data; retrying after full reinit.")
-                time.sleep(2)
-                continue
-
-            if _is_zero_batch(red, ir):
-                print("[max30102] Sequential batch was zeroed; reusing cached HR/SpO2.")
-                if not (prev_hr_valid or prev_spo2_valid):
-                    print("[max30102] No cached HR/SpO2 available; waiting for next cycle.")
-                    time.sleep(2)
-                    continue
-                hr, hr_valid = prev_hr_value, prev_hr_valid
-                spo2, spo2_valid = prev_spo2_value, prev_spo2_valid
+                print("[max30102] Unable to fetch sequential data; rendering inactive gradients.")
+                sequential_error = True
             else:
-                print("Calculating HR & SPO2")
-                hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
-                if hr_valid:
-                    prev_hr_value = hr
-                    prev_hr_valid = True
-                if spo2_valid:
-                    prev_spo2_value = spo2
-                    prev_spo2_valid = True
-
+                if _is_zero_batch(red, ir):
+                    print("[max30102] Sequential batch was zeroed; reusing cached HR/SpO2.")
+                    sequential_error = True
+                    if not (prev_hr_valid or prev_spo2_valid):
+                        print("[max30102] No cached HR/SpO2 available; forcing inactive gradient this cycle.")
+                        hr_valid = False
+                        spo2_valid = False
+                    else:
+                        hr, hr_valid = prev_hr_value, prev_hr_valid
+                        spo2, spo2_valid = prev_spo2_value, prev_spo2_valid
+                else:
+                    print("Calculating HR & SPO2")
+                    hr, hr_valid, spo2, spo2_valid = hrcalc.calc_hr_and_spo2(ir, red)
+                    if hr_valid:
+                        prev_hr_value = hr
+                        prev_hr_valid = True
+                    if spo2_valid:
+                        prev_spo2_value = spo2
+                        prev_spo2_valid = True
             if hr_valid:
                 raw_r = hr
             if spo2_valid:
@@ -679,8 +692,10 @@ if __name__ == '__main__':
             }
             strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values, metric_validity)
             activity_lookup = evaluate_metric_activity(strip_metadata, raw_metric_values)
+            if sequential_error:
+                print("[display] Sequential read error detected; forcing inactive gradients.")
             for entry in strip_metadata:
-                entry['active'] = activity_lookup.get(entry['metric'], False)
+                entry['active'] = False if sequential_error else activity_lookup.get(entry['metric'], False)
             if args.single_strip:
                 render_single_strip(strip, strip_metadata, cleaned_metric_values, gradients)
             else:
