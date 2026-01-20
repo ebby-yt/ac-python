@@ -200,6 +200,16 @@ def _parse_single_color(candidate, fallback, label, index):
         return tuple(fallback)
     return parse_color(candidate, fallback)
 
+def _normalize_gradient_length(palette, label):
+    palette = [tuple(parse_color(color, (0, 0, 0))) for color in (palette or [(0, 0, 0)])]
+    if len(palette) > GRADIENT_COLOR_COUNT:
+        log_color_config_issue(f"{label} contains extra entries; truncating to {GRADIENT_COLOR_COUNT}.")
+        palette = palette[:GRADIENT_COLOR_COUNT]
+    while len(palette) < GRADIENT_COLOR_COUNT:
+        log_color_config_issue(f"{label} missing entries; repeating last color to reach {GRADIENT_COLOR_COUNT}.")
+        palette.append(palette[-1])
+    return palette
+
 
 def load_color_config(config_path=COLOR_CONFIG_PATH):
     defaults = _load_default_payload(config_path)
