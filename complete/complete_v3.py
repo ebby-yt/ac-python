@@ -67,45 +67,45 @@ SAFE_DEFAULT_CONFIG = {
     'base_colors': [(255, 0, 0), (0, 255, 0), (0, 0, 255)],
     'end_colors': [(255, 255, 255), (255, 255, 255), (255, 255, 255)],
     'inactive_gradient': [
-        (15, 20, 35),
-        (30, 45, 70),
-        (45, 65, 95),
-        (65, 90, 120),
-        (85, 115, 145),
-        (105, 140, 170),
-        (125, 165, 195),
-        (145, 190, 220),
+        (52, 43, 34),
+        (78, 42, 40),
+        (79, 66, 42),
+        (92, 94, 47),
+        (150, 118, 63),
+        (218, 143, 122),
+        (233, 106, 44),
+        (166, 56, 23)
     ],
     'active_gradients': {
         'heart_rate': [
-            (90, 0, 30),
-            (130, 0, 60),
-            (170, 0, 90),
-            (210, 10, 110),
-            (240, 20, 120),
-            (255, 60, 90),
-            (255, 120, 60),
-            (255, 180, 40),
+            (52, 43, 34),
+            (78, 42, 40),
+            (79, 66, 42),
+            (92, 94, 47),
+            (113, 94, 96),
+            (171, 81, 98),
+            (169, 26, 60),
+            (101, 34, 44)
         ],
         'spo2': [
-            (0, 40, 90),
-            (0, 80, 130),
-            (0, 120, 170),
-            (0, 160, 210),
-            (20, 200, 240),
-            (80, 220, 255),
-            (140, 240, 255),
-            (200, 255, 255),
+            (0, 158, 153),
+            (118, 193, 199),
+            (156, 209, 192),
+            (116, 185, 135),
+            (69, 151, 101),
+            (70, 107, 103),
+            (92, 63, 95),
+            (134, 42, 85)
         ],
         'temperature': [
-            (40, 10, 0),
-            (80, 20, 0),
-            (120, 40, 0),
-            (160, 80, 0),
-            (200, 120, 0),
-            (230, 160, 20),
-            (250, 200, 40),
-            (255, 240, 60),
+            (0, 158, 153),
+            (118, 193, 199),
+            (232, 212, 204),
+            (218, 143, 122),
+            (233, 106, 44),
+            (166, 56, 23),
+            (169, 26, 60),
+            (171, 81, 98)
         ],
     },
 }
@@ -416,7 +416,6 @@ def render_strip_segments(strip, metadata, gradients, wait_ms=0):
     gradients = gradients or {}
     inactive_palette = gradients.get('inactive') or [(0, 0, 0)]
     active_palettes = gradients.get('active') or {}
-    warning_active = int(time.time() * 2) % 2 == 0
     for block_index, entry in enumerate(metadata):
         start_index = entry['start_index']
         end_index = entry['end_index']
@@ -424,9 +423,8 @@ def render_strip_segments(strip, metadata, gradients, wait_ms=0):
         if segment_length <= 0:
             continue
         if not entry.get('valid', True):
-            print(f"[display] Block {block_index + 1} ({entry['metric']}) invalid; defaulting to warning red.")
-            warning_color = WARNING_COLOR if warning_active else (0, 0, 0)
-            gradient = [warning_color] * segment_length
+            print(f"[display] Block {block_index + 1} ({entry['metric']}) invalid; using inactive palette.")
+            gradient = build_checkpoint_gradient(inactive_palette, segment_length, 0.0)
         else:
             ratio = entry.get('ratio', 0.0)
             palette = inactive_palette
