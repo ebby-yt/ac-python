@@ -6,16 +6,7 @@ import max30102
 import hrcalc
 from rpi_ws281x import Adafruit_NeoPixel, Color
 import argparse
-try:
-    import smbus
-except ModuleNotFoundError:
-    try:
-        import smbus2 as smbus
-        print("[deps] smbus unavailable; using smbus2 fallback.")
-    except ModuleNotFoundError as import_error:
-        raise ModuleNotFoundError(
-            "smbus missing. Install via 'sudo apt install -y python3-smbus' or run 'pip install smbus2' inside your virtualenv."
-        ) from import_error
+import smbus
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 # KS0023 initalization
@@ -433,13 +424,13 @@ def render_strip_segments(strip, metadata, gradients, wait_ms=0):
             continue
         if not entry.get('valid', True):
             print(f"[display] Block {block_index + 1} ({entry['metric']}) invalid; using inactive palette.")
-            gradient = build_checkpoint_gradient(inactive_palette, segment_length, 0.0)
+            gradient = build_checkpoint_gradient(inactive_palette, segment_length, 0.2)
         else:
             ratio = entry.get('ratio', 0.0)
             palette = inactive_palette
             if entry.get('active'):
                 palette = active_palettes.get(entry['metric'], inactive_palette)
-            gradient = build_checkpoint_gradient(palette, segment_length, ratio)
+            gradient = build_checkpoint_gradient(palette, segment_length, 0.2)
         for offset, (red_channel, green_channel, blue_channel) in enumerate(gradient):
             strip.setPixelColor(start_index + offset, Color(red_channel, green_channel, blue_channel))
     _clear_blank_rows(strip)
