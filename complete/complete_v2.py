@@ -17,7 +17,7 @@ device_folder = glob.glob(base_dir + '28*')[0]
 device_file = device_folder + '/w1_slave'
 
 # LED output initialization
-LED_COUNT      = 256
+LED_COUNT      = 33
 LED_COUNT_W    = 8
 LED_COUNT_H    = 32
 LED_PIN        = 18
@@ -47,20 +47,20 @@ STRIP_LAYOUT = (
     {
         'metric': 'heart_rate',
         'start_index': 0,
-        'end_index': 85,
+        'end_index': 10,
         'min_value': RYTH_MIN,
         'max_value': RYTH_MAX,
     },
     {
         'metric': 'spo2',
-        'start_index': 85,
-        'end_index': 170,
+        'start_index': 11,
+        'end_index': 21,
         'min_value': SPO2_MIN,
         'max_value': SPO2_MAX,
     },
     {
         'metric': 'temperature',
-        'start_index': 170,
+        'start_index': 22,
         'end_index': LED_COUNT,
         'min_value': TEMP_MIN,
         'max_value': TEMP_MAX,
