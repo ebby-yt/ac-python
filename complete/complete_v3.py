@@ -29,6 +29,13 @@ LED_CHANNEL    = 0       # set to '1' for GPIOs 13, 19, 41, 45 or 53
 WARNING_COLOR  = (255, 0, 0)
 SENSOR_READ_TIMEOUT = 5.0
 _SENSOR_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+GRADIENT_COLOR_COUNT = 8
+BLANK_ROWS = (10, 21)
+ALERT_THRESHOLDS = {
+    'heart_rate': {'type': 'max', 'value': 120},
+    'spo2': {'type': 'min', 'value': 93},
+    'temperature': {'type': 'max', 'value': 38.0},
+}
 
 # MIN/MAX values initalization
 TEMP_MIN = 0
@@ -46,36 +53,17 @@ RYTH_MAX = 110
 BLANK_ROWS = (10, 21)
 
 def _matrix_slice(line_start, line_count):
-    start_index = line_start * LED_COUNT_W
-    end_index = min(LED_COUNT, start_index + line_count * LED_COUNT_W)
+    start_index = max(0, line_start) * LED_COUNT_W
+    end_index = min(LED_COUNT, start_index + max(1, line_count) * LED_COUNT_W)
     return start_index, end_index
 
 HR_START, HR_END = _matrix_slice(0, 10)
 SPO2_START, SPO2_END = _matrix_slice(11, 10)
 TEMP_START, TEMP_END = _matrix_slice(22, 10)
-
 STRIP_LAYOUT = (
-    {
-        'metric': 'heart_rate',
-        'start_index': HR_START,
-        'end_index': HR_END,
-        'min_value': RYTH_MIN,
-        'max_value': RYTH_MAX,
-    },
-    {
-        'metric': 'spo2',
-        'start_index': SPO2_START,
-        'end_index': SPO2_END,
-        'min_value': SPO2_MIN,
-        'max_value': SPO2_MAX,
-    },
-    {
-        'metric': 'temperature',
-        'start_index': TEMP_START,
-        'end_index': TEMP_END,
-        'min_value': TEMP_MIN,
-        'max_value': TEMP_MAX,
-    },
+    {'metric': 'heart_rate', 'start_index': HR_START, 'end_index': HR_END, 'min_value': RYTH_MIN, 'max_value': RYTH_MAX},
+    {'metric': 'spo2', 'start_index': SPO2_START, 'end_index': SPO2_END, 'min_value': SPO2_MIN, 'max_value': SPO2_MAX},
+    {'metric': 'temperature', 'start_index': TEMP_START, 'end_index': TEMP_END, 'min_value': TEMP_MIN, 'max_value': TEMP_MAX},
 )
 
 COLOR_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'color_config.json')
@@ -83,6 +71,48 @@ SAFE_DEFAULT_CONFIG = {
     'strip_order': ['heart_rate', 'spo2', 'temperature'],
     'base_colors': [(255, 0, 0), (0, 128, 255), (255, 140, 0)],
     'end_colors': [(255, 200, 200), (0, 255, 255), (255, 255, 0)],
+    'inactive_gradient': [
+        (15, 20, 35),
+        (30, 45, 70),
+        (45, 65, 95),
+        (65, 90, 120),
+        (85, 115, 145),
+        (105, 140, 170),
+        (125, 165, 195),
+        (145, 190, 220),
+    ],
+    'active_gradients': {
+        'heart_rate': [
+            (90, 0, 30),
+            (130, 0, 60),
+            (170, 0, 90),
+            (210, 10, 110),
+            (240, 20, 120),
+            (255, 60, 90),
+            (255, 120, 60),
+            (255, 180, 40),
+        ],
+        'spo2': [
+            (0, 40, 90),
+            (0, 80, 130),
+            (0, 120, 170),
+            (0, 160, 210),
+            (20, 200, 240),
+            (80, 220, 255),
+            (140, 240, 255),
+            (200, 255, 255),
+        ],
+        'temperature': [
+            (40, 10, 0),
+            (80, 20, 0),
+            (120, 40, 0),
+            (160, 80, 0),
+            (200, 120, 0),
+            (230, 160, 20),
+            (250, 200, 40),
+            (255, 240, 60),
+        ],
+    },
 }
 
 
@@ -115,19 +145,27 @@ def log_color_config_issue(message):
 
 
 def _load_default_payload(config_path):
+    base_defaults = {
+        'strip_order': list(SAFE_DEFAULT_CONFIG['strip_order']),
+        'base_colors': [tuple(color) for color in SAFE_DEFAULT_CONFIG['base_colors']],
+        'end_colors': [tuple(color) for color in SAFE_DEFAULT_CONFIG['end_colors']],
+        'inactive_gradient': [tuple(color) for color in SAFE_DEFAULT_CONFIG['inactive_gradient']],
+        'active_gradients': {
+            metric: [tuple(color) for color in gradients]
+            for metric, gradients in SAFE_DEFAULT_CONFIG['active_gradients'].items()
+        },
+    }
     try:
         with open(config_path, 'r', encoding='utf-8') as config_file:
             payload = json.load(config_file)
             if isinstance(payload, dict):
-                return payload
+                merged = dict(base_defaults)
+                merged.update(payload)
+                return merged
             log_color_config_issue('Malformed color_config.json payload; using safe defaults.')
     except (OSError, ValueError) as error:
         log_color_config_issue(f"Failed to read {config_path}: {error}. Using safe defaults.")
-    return {
-        'strip_order': list(SAFE_DEFAULT_CONFIG['strip_order']),
-        'base_colors': [tuple(color) for color in SAFE_DEFAULT_CONFIG['base_colors']],
-        'end_colors': [tuple(color) for color in SAFE_DEFAULT_CONFIG['end_colors']],
-    }
+    return base_defaults
 
 
 def _parse_strip_order(raw_order, fallback):
@@ -170,16 +208,32 @@ def load_color_config(config_path=COLOR_CONFIG_PATH):
         with open(config_path, 'r', encoding='utf-8') as config_file:
             maybe_payload = json.load(config_file)
             if isinstance(maybe_payload, dict):
-                payload = maybe_payload
+                merged = dict(defaults)
+                merged.update(maybe_payload)
+                payload = merged
             else:
                 log_color_config_issue('color_config.json is not a JSON object; reusing defaults from file.')
     except (OSError, ValueError) as error:
         log_color_config_issue(f"Failed to read {config_path}: {error}. Reusing defaults from file.")
 
+    inactive_gradient = _normalize_gradient_length(
+        _parse_color_entries(payload.get('inactive_gradient'), defaults['inactive_gradient'], 'inactive_gradient'),
+        'inactive_gradient',
+    )
+    active_gradients = _parse_metric_gradients(
+        payload.get('active_gradients'),
+        defaults['active_gradients'],
+        'active_gradients',
+    )
+
     return {
         'strip_order': _parse_strip_order(payload.get('strip_order'), defaults['strip_order']),
         'base_colors': _parse_color_entries(payload.get('base_colors'), defaults['base_colors'], 'base_colors'),
         'end_colors': _parse_color_entries(payload.get('end_colors'), defaults['end_colors'], 'end_colors'),
+        'gradients': {
+            'inactive': inactive_gradient,
+            'active': active_gradients,
+        },
     }
 
 
@@ -280,10 +334,81 @@ def build_gradient(start_color, end_color, steps):
 
 
 def scale_color(color, factor):
-    return tuple(clamp_color_value(channel * factor) for channel in color)
+    factor = max(0.0, min(1.0, float(factor)))
+    return tuple(clamp_color_value(round(channel * factor)) for channel in color)
 
+def build_checkpoint_gradient(checkpoints, steps, intensity_ratio=1.0):
+    steps = max(0, int(steps))
+    if steps == 0:
+        return []
+    sanitized = [parse_color(color, (0, 0, 0)) for color in (checkpoints or [(0, 0, 0)])]
+    intensity_ratio = max(0.0, min(1.0, float(intensity_ratio or 0.0)))
+    if len(sanitized) == 1 or steps == 1:
+        scaled = scale_color(sanitized[-1], intensity_ratio)
+        return [scaled] * steps
+    segments = len(sanitized) - 1
+    gradient = []
+    for index in range(steps):
+        position = (index / (steps - 1)) * segments
+        base_index = min(int(position), segments - 1)
+        local_ratio = position - base_index
+        start_color = sanitized[base_index]
+        end_color = sanitized[base_index + 1]
+        interpolated = tuple(
+            clamp_color_value(
+                round(start_color[channel] + (end_color[channel] - start_color[channel]) * local_ratio)
+            )
+            for channel in range(3)
+        )
+        gradient.append(scale_color(interpolated, intensity_ratio))
+    return gradient
 
-def render_strip_segments(strip, metadata, wait_ms=0):
+def should_use_alert_palette(raw_metrics):
+    for metric, rule in ALERT_THRESHOLDS.items():
+        value = raw_metrics.get(metric)
+        limit = rule.get('value')
+        if value is None or limit is None:
+            continue
+        try:
+            numeric_value = float(value)
+            limit_value = float(limit)
+        except (TypeError, ValueError):
+            continue
+        comparator = rule.get('type', 'max')
+        if comparator == 'min' and numeric_value <= limit_value:
+            return True
+        if comparator != 'min' and numeric_value >= limit_value:
+            return True
+    return False
+
+def evaluate_metric_activity(strip_metadata, raw_metrics):
+    activity = {}
+    for entry in strip_metadata:
+        metric = entry['metric']
+        raw_value = raw_metrics.get(metric)
+        min_value = float(entry.get('min_value', 0))
+        max_value = float(entry.get('max_value', 0))
+        threshold = min_value + (max_value - min_value) / 2.0
+        active = False
+        if raw_value is not None:
+            try:
+                active = float(raw_value) >= threshold
+            except (TypeError, ValueError):
+                active = False
+        activity[metric] = active
+    return activity
+
+def _clear_blank_rows(strip):
+    for row in BLANK_ROWS:
+        start = row * LED_COUNT_W
+        end = min(start + LED_COUNT_W, strip.numPixels())
+        for pixel_index in range(start, end):
+            strip.setPixelColor(pixel_index, Color(0, 0, 0))
+
+def render_strip_segments(strip, metadata, gradients, wait_ms=0):
+    gradients = gradients or {}
+    inactive_palette = gradients.get('inactive') or [(0, 0, 0)]
+    active_palettes = gradients.get('active') or {}
     warning_active = int(time.time() * 2) % 2 == 0
     for block_index, entry in enumerate(metadata):
         start_index = entry['start_index']
@@ -292,15 +417,15 @@ def render_strip_segments(strip, metadata, wait_ms=0):
         if segment_length <= 0:
             continue
         if not entry.get('valid', True):
-            print(
-                f"[display] Block {block_index + 1} ({entry['metric']}) invalid; defaulting to warning red."
-            )
+            print(f"[display] Block {block_index + 1} ({entry['metric']}) invalid; defaulting to warning red.")
             warning_color = WARNING_COLOR if warning_active else (0, 0, 0)
             gradient = [warning_color] * segment_length
         else:
-            ratio = entry.get('ratio', 0)
-            target_end_color = scale_color(entry['end_color'], ratio)
-            gradient = build_gradient(entry['base_color'], target_end_color, segment_length)
+            ratio = entry.get('ratio', 0.0)
+            palette = inactive_palette
+            if entry.get('active'):
+                palette = active_palettes.get(entry['metric'], inactive_palette)
+            gradient = build_checkpoint_gradient(palette, segment_length, ratio)
         for offset, (red_channel, green_channel, blue_channel) in enumerate(gradient):
             strip.setPixelColor(start_index + offset, Color(red_channel, green_channel, blue_channel))
     _clear_blank_rows(strip)
@@ -309,17 +434,20 @@ def render_strip_segments(strip, metadata, wait_ms=0):
         time.sleep(wait_ms / 1000.0)
 
 
-def render_single_strip(strip, metadata, cleaned_values):
-    if not metadata:
-        return
-    primary_strip = metadata[0]
-    base_start_color = primary_strip['base_color']
-    base_end_color = primary_strip['end_color']
-    max_clean_value = max(cleaned_values.values()) if cleaned_values else 0
-    intensity_factor = max_clean_value / 255.0 if max_clean_value else 1.0
-    start_color = scale_color(base_start_color, intensity_factor)
-    end_color = scale_color(base_end_color, intensity_factor)
-    betterColorWipe(strip, start_color, end_color)
+def render_single_strip(strip, metadata, cleaned_values, gradients):
+    gradients = gradients or {}
+    inactive_palette = gradients.get('inactive') or [(0, 0, 0)]
+    active_palettes = gradients.get('active') or {}
+    palette = inactive_palette
+    intensity_factor = max((entry.get('ratio', 0.0) for entry in metadata), default=0.0)
+    for entry in metadata:
+        if entry.get('active'):
+            palette = active_palettes.get(entry['metric'], inactive_palette)
+            break
+    gradient = build_checkpoint_gradient(palette, strip.numPixels(), intensity_factor)
+    for index, (red_channel, green_channel, blue_channel) in enumerate(gradient):
+        strip.setPixelColor(index, Color(red_channel, green_channel, blue_channel))
+    strip.show()
 
 def read_temp_raw():
     f = open(device_file, 'r')
@@ -450,13 +578,6 @@ def _is_zero_batch(red_samples, ir_samples):
         return False
     return all(sample == 0 for sample in red_samples) and all(sample == 0 for sample in ir_samples)
 
-def _clear_blank_rows(strip):
-    for row in BLANK_ROWS:
-        start = row * LED_COUNT_W
-        end = min(start + LED_COUNT_W, strip.numPixels())
-        for pixel_index in range(start, end):
-            strip.setPixelColor(pixel_index, Color(0, 0, 0))
-
 if __name__ == '__main__':
     args = parse_args()
     m = None
@@ -465,10 +586,12 @@ if __name__ == '__main__':
     # Intialize the library (must be called once before other functions).
     strip.begin()
     color_config = load_color_config()
+    gradients = color_config.get('gradients', {})
     prev_hr_value = 0
     prev_spo2_value = 0
     prev_hr_valid = False
     prev_spo2_valid = False
+    prev_alert_active = False
     try:
         while True:
             raw_r, raw_g, raw_b = 0, 0, 0
@@ -480,10 +603,9 @@ if __name__ == '__main__':
                 continue
 
             print("Reading temp")
-            raw_b = read_temp()
-            temp_valid = raw_b is not None
-            if not temp_valid:
-                raw_b = TEMP_MIN
+            temp_reading = read_temp()
+            temp_valid = temp_reading is not None
+            raw_b = temp_reading if temp_valid else TEMP_MIN
             print("SPO2 and HR")
             print("Reading sequential data")
             red, ir = acquire_sensor_samples(m)
@@ -514,7 +636,18 @@ if __name__ == '__main__':
                 raw_r = hr
             if spo2_valid:
                 raw_g = spo2
-
+            raw_metric_values = {
+                'heart_rate': hr if hr_valid else None,
+                'spo2': spo2 if spo2_valid else None,
+                'temperature': temp_reading if temp_valid else None,
+            }
+            alert_active = should_use_alert_palette(raw_metric_values)
+            if alert_active != prev_alert_active:
+                print(f"[display] Switched to {'alert' if alert_active else 'normal'} gradient palette.")
+            prev_alert_active = alert_active
+            palette_key = 'alert' if alert_active else 'normal'
+            gradients = color_config.get('gradients', {})
+            active_palette = gradients.get(palette_key) or gradients.get('normal') or [(0, 0, 0)]
             # Clean raw data
             print("Cleaning data")
             color_r, color_g, color_b = clean_data(raw_r, raw_g, raw_b, color_r, color_g, color_b)
@@ -547,10 +680,13 @@ if __name__ == '__main__':
                 'fallback': True,
             }
             strip_metadata = attach_metric_ratios(strip_metadata, cleaned_metric_values, metric_validity)
+            activity_lookup = evaluate_metric_activity(strip_metadata, raw_metric_values)
+            for entry in strip_metadata:
+                entry['active'] = activity_lookup.get(entry['metric'], False)
             if args.single_strip:
-                render_single_strip(strip, strip_metadata, cleaned_metric_values)
+                render_single_strip(strip, strip_metadata, cleaned_metric_values, gradients)
             else:
-                render_strip_segments(strip, strip_metadata)
+                render_strip_segments(strip, strip_metadata, gradients)
             m = None
             time.sleep(2)
     except KeyboardInterrupt:
