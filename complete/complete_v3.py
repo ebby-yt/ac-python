@@ -23,7 +23,7 @@ LED_COUNT      = LED_COUNT_W * LED_COUNT_H
 LED_PIN        = 18
 LED_FREQ_HZ    = 800000  # LED signal frequency in hertz (usually 800khz)
 LED_DMA        = 10      # DMA channel to use for generating a signal (try 10)
-LED_BRIGHTNESS = 65      # Set to 0 for darkest and 255 for brightest
+LED_BRIGHTNESS = 30      # Set to 0 for darkest and 255 for brightest
 LED_INVERT     = False   # True to invert the signal (when using NPN transistor level shift)
 LED_CHANNEL    = 0       # set to '1' for GPIOs 13, 19, 41, 45 or 53
 WARNING_COLOR  = (255, 0, 0)
@@ -31,11 +31,6 @@ SENSOR_READ_TIMEOUT = 5.0
 _SENSOR_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 GRADIENT_COLOR_COUNT = 8
 BLANK_ROWS = (10, 21)
-ALERT_THRESHOLDS = {
-    'heart_rate': {'type': 'max', 'value': 120},
-    'spo2': {'type': 'min', 'value': 93},
-    'temperature': {'type': 'max', 'value': 38.0},
-}
 
 # MIN/MAX values initalization
 TEMP_MIN = 0
@@ -69,8 +64,8 @@ STRIP_LAYOUT = (
 COLOR_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'color_config.json')
 SAFE_DEFAULT_CONFIG = {
     'strip_order': ['heart_rate', 'spo2', 'temperature'],
-    'base_colors': [(255, 0, 0), (0, 128, 255), (255, 140, 0)],
-    'end_colors': [(255, 200, 200), (0, 255, 255), (255, 255, 0)],
+    'base_colors': [(255, 0, 0), (0, 255, 0), (0, 0, 255)],
+    'end_colors': [(255, 255, 255), (255, 255, 255), (255, 255, 255)],
     'inactive_gradient': [
         (15, 20, 35),
         (30, 45, 70),
@@ -393,24 +388,6 @@ def build_checkpoint_gradient(checkpoints, steps, intensity_ratio=1.0):
         gradient.append(scale_color(interpolated, intensity_ratio))
     return gradient
 
-def should_use_alert_palette(raw_metrics):
-    for metric, rule in ALERT_THRESHOLDS.items():
-        value = raw_metrics.get(metric)
-        limit = rule.get('value')
-        if value is None or limit is None:
-            continue
-        try:
-            numeric_value = float(value)
-            limit_value = float(limit)
-        except (TypeError, ValueError):
-            continue
-        comparator = rule.get('type', 'max')
-        if comparator == 'min' and numeric_value <= limit_value:
-            return True
-        if comparator != 'min' and numeric_value >= limit_value:
-            return True
-    return False
-
 def evaluate_metric_activity(strip_metadata, raw_metrics):
     activity = {}
     for entry in strip_metadata:
@@ -671,13 +648,6 @@ if __name__ == '__main__':
                 'spo2': spo2 if spo2_valid else None,
                 'temperature': temp_reading if temp_valid else None,
             }
-            alert_active = should_use_alert_palette(raw_metric_values)
-            if alert_active != prev_alert_active:
-                print(f"[display] Switched to {'alert' if alert_active else 'normal'} gradient palette.")
-            prev_alert_active = alert_active
-            palette_key = 'alert' if alert_active else 'normal'
-            gradients = color_config.get('gradients', {})
-            active_palette = gradients.get(palette_key) or gradients.get('normal') or [(0, 0, 0)]
             # Clean raw data
             print("Cleaning data")
             color_r, color_g, color_b = clean_data(raw_r, raw_g, raw_b, color_r, color_g, color_b)
