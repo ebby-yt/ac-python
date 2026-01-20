@@ -210,6 +210,26 @@ def _normalize_gradient_length(palette, label):
         palette.append(palette[-1])
     return palette
 
+def _parse_metric_gradients(raw_dict, defaults, label):
+    if not isinstance(raw_dict, dict):
+        log_color_config_issue(f"{label} missing or invalid; using defaults.")
+        raw_dict = {}
+    resolved = {}
+    for metric, default_palette in defaults.items():
+        candidate = raw_dict.get(metric, default_palette)
+        resolved[metric] = _normalize_gradient_length(
+            _parse_color_entries(candidate, default_palette, f"{label}.{metric}"),
+            f"{label}.{metric}",
+        )
+    for metric, candidate in raw_dict.items():
+        if metric in resolved:
+            continue
+        resolved[metric] = _normalize_gradient_length(
+            _parse_color_entries(candidate, candidate, f"{label}.{metric}"),
+            f"{label}.{metric}",
+        )
+    return resolved
+
 
 def load_color_config(config_path=COLOR_CONFIG_PATH):
     defaults = _load_default_payload(config_path)
