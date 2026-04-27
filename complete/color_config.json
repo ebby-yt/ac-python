@@ -4,7 +4,8 @@
     "spo2",
     "temperature"
   ],
-  "order_note": "Entries in base_colors and end_colors follow this order (strip 1 = heart_rate, strip 2 = spo2, strip 3 = temperature).",
+  "order_note": "Legacy single-strip entries in base_colors and end_colors follow this order (strip 1 = heart_rate, strip 2 = spo2, strip 3 = temperature).",
+  "palette_note": "inactive_gradient and active_gradient are the two shared 8-color states. If any sensor is above its threshold, all blocks use active_gradient; otherwise they use inactive_gradient. Each block chooses the matching color with color_index 0-7.",
   "base_colors": [
     [255, 0, 0],
     [0, 255, 0],
@@ -25,36 +26,70 @@
     [169, 26, 60],
     [101, 34, 44]
   ],
-  "active_gradients": {
-    "heart_rate": [
-      [52, 43, 34],
-      [78, 42, 40],
-      [79, 66, 42],
-      [92, 94, 47],
-      [150, 118, 63],
-      [218, 143, 122],
-      [233, 106, 44],
-      [166, 56, 23]
-    ],
-    "spo2": [
-      [0, 158, 153],
-      [118, 193, 199],
-      [156, 209, 192],
-      [116, 185, 135],
-      [69, 151, 101],
-      [70, 107, 103],
-      [92, 63, 95],
-      [134, 42, 85]
-    ],
-    "temperature": [
-      [0, 158, 153],
-      [118, 193, 199],
-      [232, 212, 204],
-      [218, 143, 122],
-      [233, 106, 44],
-      [166, 56, 23],
-      [169, 26, 60],
-      [171, 81, 98]
-    ]
-  }
+  "active_gradient": [
+    [52, 43, 34],
+    [78, 42, 40],
+    [79, 66, 42],
+    [92, 94, 47],
+    [150, 118, 63],
+    [218, 143, 122],
+    [233, 106, 44],
+    [166, 56, 23]
+  ],
+  "led_strips": [
+    {
+      "name": "left_arm",
+      "pin": 18,
+      "channel": 0,
+      "count": 24,
+      "blocks": [
+        { "name": "left_arm_single_8", "start_index": 0, "end_index": 1, "color_index": 7 },
+        { "name": "left_arm_single_6", "start_index": 1, "end_index": 2, "color_index": 5 },
+        { "name": "left_arm_single_4", "start_index": 2, "end_index": 3, "color_index": 3 },
+        { "name": "left_arm_gradient_2", "start_index": 3, "end_index": 6, "color_index": 1 },
+        { "name": "left_arm_gradient_3", "start_index": 6, "end_index": 9, "color_index": 2 },
+        { "name": "left_arm_gradient_4", "start_index": 9, "end_index": 12, "color_index": 3 },
+        { "name": "left_arm_gradient_5", "start_index": 12, "end_index": 14, "color_index": 4 },
+        { "name": "left_arm_gradient_6", "start_index": 14, "end_index": 16, "color_index": 5 },
+        { "name": "left_arm_gradient_7", "start_index": 16, "end_index": 18, "color_index": 6 },
+        { "name": "left_arm_final_8", "start_index": 18, "end_index": 24, "color_index": 7 }
+      ]
+    },
+    {
+      "name": "center_piece",
+      "pin": 13,
+      "channel": 1,
+      "count": 54,
+      "blocks": [
+        { "name": "center_base_8", "start_index": 0, "end_index": 27, "color_index": 7 },
+        { "name": "center_gradient_down_5", "start_index": 27, "end_index": 30, "color_index": 4 },
+        { "name": "center_gradient_down_4", "start_index": 30, "end_index": 32, "color_index": 3 },
+        { "name": "center_gradient_down_3", "start_index": 32, "end_index": 34, "color_index": 2 },
+        { "name": "center_gradient_down_2", "start_index": 34, "end_index": 36, "color_index": 1 },
+        { "name": "center_middle_1", "start_index": 36, "end_index": 45, "color_index": 0 },
+        { "name": "center_gradient_up_2", "start_index": 45, "end_index": 48, "color_index": 1 },
+        { "name": "center_gradient_up_3", "start_index": 48, "end_index": 50, "color_index": 2 },
+        { "name": "center_gradient_up_4", "start_index": 50, "end_index": 52, "color_index": 3 },
+        { "name": "center_gradient_up_5", "start_index": 52, "end_index": 54, "color_index": 4 }
+      ]
+    },
+    {
+      "name": "right_arm",
+      "pin": 21,
+      "channel": 0,
+      "count": 24,
+      "blocks": [
+        { "name": "right_arm_single_8", "start_index": 0, "end_index": 1, "color_index": 7 },
+        { "name": "right_arm_single_6", "start_index": 1, "end_index": 2, "color_index": 5 },
+        { "name": "right_arm_single_4", "start_index": 2, "end_index": 3, "color_index": 3 },
+        { "name": "right_arm_gradient_2", "start_index": 3, "end_index": 6, "color_index": 1 },
+        { "name": "right_arm_gradient_3", "start_index": 6, "end_index": 9, "color_index": 2 },
+        { "name": "right_arm_gradient_4", "start_index": 9, "end_index": 12, "color_index": 3 },
+        { "name": "right_arm_gradient_5", "start_index": 12, "end_index": 14, "color_index": 4 },
+        { "name": "right_arm_gradient_6", "start_index": 14, "end_index": 16, "color_index": 5 },
+        { "name": "right_arm_gradient_7", "start_index": 16, "end_index": 18, "color_index": 6 },
+        { "name": "right_arm_final_8", "start_index": 18, "end_index": 24, "color_index": 7 }
+      ]
+    }
+  ]
 }

@@ -22,3 +22,9 @@
 - [x] **Graceful degradation**
   - If a metric reading is invalid, default its ratio to 0 and flash a warning color (full red) so hardware issues are visible.
   - Provide a CLI flag to revert to the single-strip behavior for debugging.
+
+- [x] **Map blocks across three physical pins**
+  - Add `led_strips` to [complete/color_config.json](complete/color_config.json) so each GPIO pin can define its own LED count, channel, and local blocks.
+  - Use `inactive_gradient` and `active_gradient` as the two shared 8-color states; each block selects the matching color with `color_index` from `0` to `7`.
+  - Treat any sensor value at or above its configured threshold as globally active; only render inactive when all sensors are below threshold or unavailable.
+  - Keep `--single-strip` as the legacy one-pin renderer for debugging.
