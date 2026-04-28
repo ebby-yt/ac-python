@@ -106,7 +106,7 @@ Useful button options:
 ```bash
 python complete/complete_button.py --button-address AA:BB:CC:DD:EE:FF
 python complete/complete_button.py --button-mode momentary --active-seconds 5
-python complete/complete_button.py --scan-debug
+python complete/complete_button.py --scan-all-debug
 ```
 
 ## Current LED Model

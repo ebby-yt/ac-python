@@ -140,8 +140,8 @@ def parse_args():
     )
     parser.add_argument(
         '--button-name',
-        default='ShellyBLU',
-        help='Bluetooth name prefix to accept when --button-address is not set.',
+        default='',
+        help='Optional Bluetooth name prefix to accept when --button-address is not set.',
     )
     parser.add_argument(
         '--button-mode',
@@ -163,7 +163,12 @@ def parse_args():
     parser.add_argument(
         '--scan-debug',
         action='store_true',
-        help='Print matching BLE advertisements while pairing/debugging.',
+        help='Print parsed BTHome button advertisements while pairing/debugging.',
+    )
+    parser.add_argument(
+        '--scan-all-debug',
+        action='store_true',
+        help='Print nearby BLE advertisements, even when they are not recognized as the button.',
     )
     return parser.parse_args()
 
@@ -550,27 +555,59 @@ class ButtonGradientState:
             return self._active
 
 
-def _device_matches(device, advertisement_data, button_address='', button_name='ShellyBLU'):
+def _device_matches(device, advertisement_data, event_code=None, button_address='', button_name=''):
     if button_address and device.address.lower() == button_address.lower():
+        return True
+    if event_code is not None and not button_name:
         return True
     names = [
         getattr(device, 'name', '') or '',
         getattr(advertisement_data, 'local_name', '') or '',
     ]
-    return any(name.startswith(button_name) for name in names if name)
+    return bool(button_name) and any(name.startswith(button_name) for name in names if name)
 
 
-def _iter_advertisement_payloads(advertisement_data):
-    for payload in getattr(advertisement_data, 'service_data', {}).values():
-        yield bytes(payload)
-    for payload in getattr(advertisement_data, 'manufacturer_data', {}).values():
-        yield bytes(payload)
+def _normalize_uuid(uuid):
+    return str(uuid).lower()
+
+
+def _iter_advertisement_payloads(advertisement_data, prefer_bthome=False):
+    service_data = getattr(advertisement_data, 'service_data', {}) or {}
+    for uuid, payload in service_data.items():
+        normalized_uuid = _normalize_uuid(uuid)
+        is_bthome = normalized_uuid in (SHELLY_BTHOME_SERVICE_UUID, 'fcd2', '0000fcd2')
+        if prefer_bthome and not is_bthome:
+            continue
+        yield bytes(payload), normalized_uuid, is_bthome
+    if prefer_bthome:
+        return
+    for company_id, payload in (getattr(advertisement_data, 'manufacturer_data', {}) or {}).items():
+        yield bytes(payload), f'manufacturer:{company_id}', False
 
 
 def _parse_shelly_button_event(advertisement_data):
     packet_id = None
-    for payload in _iter_advertisement_payloads(advertisement_data):
+    parsed_any_payload = False
+    for prefer_bthome in (True, False):
+        for payload, _source, _is_bthome in _iter_advertisement_payloads(advertisement_data, prefer_bthome):
+            parsed_any_payload = True
+            result, packet_id = _parse_bthome_payload(payload, packet_id)
+            if result is not None:
+                return result, packet_id
+        if parsed_any_payload:
+            break
+    return None, packet_id
+
+
+def _parse_bthome_payload(payload, packet_id=None):
+    if not payload:
+        return None, packet_id
+    start_indexes = (1, 0)
+    for start_index in start_indexes:
         index = 0
+        if start_index >= len(payload):
+            continue
+        index = start_index
         while index < len(payload):
             object_id = payload[index]
             if object_id == 0x00 and index + 1 < len(payload):
@@ -587,6 +624,22 @@ def _parse_shelly_button_event(advertisement_data):
     return None, packet_id
 
 
+def _format_debug_advertisement(device, advertisement_data, event_code, packet_id):
+    names = [
+        getattr(device, 'name', '') or '',
+        getattr(advertisement_data, 'local_name', '') or '',
+    ]
+    service_keys = list((getattr(advertisement_data, 'service_data', {}) or {}).keys())
+    manufacturer_keys = list((getattr(advertisement_data, 'manufacturer_data', {}) or {}).keys())
+    return (
+        f"[button] adv address={device.address} "
+        f"name={next((name for name in names if name), '<none>')} "
+        f"rssi={getattr(advertisement_data, 'rssi', '<unknown>')} "
+        f"services={service_keys} manufacturers={manufacturer_keys} "
+        f"event={event_code} packet={packet_id}"
+    )
+
+
 async def _scan_shelly_button(state, args, stop_event):
     if BleakScanner is None:
         print("[button] bleak is not installed; run `python -m pip install bleak`.")
@@ -595,11 +648,13 @@ async def _scan_shelly_button(state, args, stop_event):
     def detection_callback(device, advertisement_data):
         if stop_event.is_set():
             return
-        if not _device_matches(device, advertisement_data, args.button_address, args.button_name):
-            return
         event_code, packet_id = _parse_shelly_button_event(advertisement_data)
-        if args.scan_debug:
-            print(f"[button] Advertisement from {device.address}; event={event_code}; packet={packet_id}")
+        if args.scan_all_debug:
+            print(_format_debug_advertisement(device, advertisement_data, event_code, packet_id))
+        if not _device_matches(device, advertisement_data, event_code, args.button_address, args.button_name):
+            return
+        if args.scan_debug and event_code is not None:
+            print(_format_debug_advertisement(device, advertisement_data, event_code, packet_id))
         if event_code is None:
             return
         result = state.handle_event(event_code, packet_id)
