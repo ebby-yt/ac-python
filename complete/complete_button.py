@@ -629,14 +629,25 @@ def _format_debug_advertisement(device, advertisement_data, event_code, packet_i
         getattr(device, 'name', '') or '',
         getattr(advertisement_data, 'local_name', '') or '',
     ]
-    service_keys = list((getattr(advertisement_data, 'service_data', {}) or {}).keys())
-    manufacturer_keys = list((getattr(advertisement_data, 'manufacturer_data', {}) or {}).keys())
+    service_data = getattr(advertisement_data, 'service_data', {}) or {}
+    manufacturer_data = getattr(advertisement_data, 'manufacturer_data', {}) or {}
+    service_keys = list(service_data.keys())
+    manufacturer_keys = list(manufacturer_data.keys())
+    service_hex = {
+        str(uuid): bytes(payload).hex()
+        for uuid, payload in service_data.items()
+    }
+    manufacturer_hex = {
+        str(company_id): bytes(payload).hex()
+        for company_id, payload in manufacturer_data.items()
+    }
     return (
         f"[button] adv address={device.address} "
         f"name={next((name for name in names if name), '<none>')} "
         f"rssi={getattr(advertisement_data, 'rssi', '<unknown>')} "
         f"services={service_keys} manufacturers={manufacturer_keys} "
-        f"event={event_code} packet={packet_id}"
+        f"event={event_code} packet={packet_id} "
+        f"service_data={service_hex} manufacturer_data={manufacturer_hex}"
     )
 
 
