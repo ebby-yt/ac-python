@@ -4,12 +4,11 @@ import time
 import json
 import asyncio
 import threading
-import max30102
-import hrcalc
 from rpi_ws281x import Adafruit_NeoPixel, Color
 import argparse
-import smbus
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+max30102 = None
 
 try:
     from bleak import BleakScanner
@@ -715,6 +714,9 @@ def clean_data(raw_r, raw_g, raw_b, clean_r, clean_g, clean_b):
     return clean_r, clean_g, clean_b
 
 def initialize_sensor(max_retries=3, retry_delay=0.5):
+    if max30102 is None:
+        print("[max30102] Sensor module is not loaded in complete_button.py.")
+        return None
     for attempt in range(1, max_retries + 1):
         try:
             return max30102.MAX30102()
