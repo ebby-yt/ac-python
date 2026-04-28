@@ -15,6 +15,7 @@ The current production entry point is `complete/complete_v4.py`. Older `complete
 .
 |-- complete/
 |   |-- complete_v4.py        # Current multi-strip wearable script
+|   |-- complete_button.py    # One-strip Shelly BLU Button 1 gradient script
 |   |-- color_config.json     # LED palettes, pins, strip sizes, and blocks
 |   |-- hrcalc.py             # Heart-rate/SpO2 calculation helpers
 |   |-- max30102.py           # MAX30102 sensor driver
@@ -94,6 +95,20 @@ python complete/complete_v4.py
 
 If LED initialization fails with a `/dev/mem` or `mmap()` error, run the script with `sudo` for a quick test, then use the systemd/root or capability setup in `docs/autostart-loop.md` for deployment.
 
+For the Shelly BLU Button 1 one-strip variant:
+
+```bash
+python complete/complete_button.py
+```
+
+Useful button options:
+
+```bash
+python complete/complete_button.py --button-address AA:BB:CC:DD:EE:FF
+python complete/complete_button.py --button-mode momentary --active-seconds 5
+python complete/complete_button.py --scan-debug
+```
+
 ## Current LED Model
 
 `complete/complete_v4.py` reads `complete/color_config.json` and creates three physical LED outputs:
@@ -140,6 +155,8 @@ python complete/complete_v4.py --single-strip
 ```
 
 The normal V4 mode uses the `led_strips` entries in `complete/color_config.json`.
+
+The button variant uses one strip on GPIO 18 and listens for Shelly BLU Button 1 BTHome advertisements. By default, a recognized button event toggles between inactive and active gradients.
 
 ## Autostart
 

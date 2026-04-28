@@ -4,3 +4,4 @@ adafruit-circuitpython-neopixel==6.3.12
 adafruit-circuitpython-pixelbuf==2.0.6
 rpi-ws281x==5.0.0
 smbus
+bleak==0.22.3
