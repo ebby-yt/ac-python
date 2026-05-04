@@ -17,6 +17,10 @@ Each strip uses its `blocks` from `complete/color_config.json`. When the button 
 inactive, blocks use `inactive_gradient`. When the button state is active, blocks use
 `active_gradient`.
 
+At startup, `button_v4.py` builds a fixed per-LED two-state map from those blocks. In
+normal multi-strip mode, each physical LED can only be rendered with its inactive color
+or its active color from that map.
+
 ## Requirements
 
 Install the normal project requirements first:
@@ -61,10 +65,11 @@ python complete/button_v4.py --single-strip
 The script listens for Shelly BLU Button 1 BTHome advertisements.
 
 - Default mode is `toggle`: each recognized button event flips active on or off.
-- `momentary` mode activates the gradient for `--active-seconds`, then returns inactive.
+- By default, only a normal press changes the LEDs.
+- `momentary` mode activates the gradient for `--active-seconds`; use toggle mode for the cleanest two-state behavior.
 - Duplicate packets are filtered so one BLE advertisement burst should not flip the state repeatedly.
 
-Accepted button event codes are press, double press, triple press, long press, and hold.
+Double press, triple press, long press, and hold advertisements are ignored unless their CLI flags are enabled.
 
 ## CLI Options
 
@@ -75,6 +80,9 @@ Accepted button event codes are press, double press, triple press, long press, a
 - `--active-seconds`: momentary active duration, default `5.0`.
 - `--scan-debug`: print parsed button advertisements.
 - `--scan-all-debug`: print nearby BLE advertisements, including non-button packets.
+- `--include-multi-click-events`: also accept double, triple, and long press events.
+- `--include-hold-events`: also accept hold events.
+- `--event-debounce-seconds`: minimum gap between accepted events, default `1.0`.
 
 ## Configuration
 

@@ -48,7 +48,7 @@ BUTTON_EVENT_NAMES = {
     0x80: 'hold',
     0xFE: 'hold',
 }
-DEFAULT_BUTTON_EVENT_CODES = (0x01, 0x02, 0x03, 0x04)
+DEFAULT_BUTTON_EVENT_CODES = (0x01,)
 
 # MIN/MAX values initalization
 TEMP_MIN = 0
@@ -208,6 +208,17 @@ def parse_args():
         '--include-hold-events',
         action='store_true',
         help='Also let hold advertisements toggle/activate the gradient.',
+    )
+    parser.add_argument(
+        '--include-multi-click-events',
+        action='store_true',
+        help='Also let double, triple, and long press advertisements toggle/activate the gradient.',
+    )
+    parser.add_argument(
+        '--event-debounce-seconds',
+        type=float,
+        default=1.0,
+        help='Ignore accepted button events received within this many seconds of the previous accepted event.',
     )
     return parser.parse_args()
 
@@ -680,6 +691,63 @@ def render_physical_strip_blocks(strip_entries, gradients, active=False, wait_ms
         time.sleep(wait_ms / 1000.0)
 
 
+def build_two_state_pixel_maps(strip_entries, gradients):
+    gradients = gradients or {}
+    inactive_palette = gradients.get('inactive') or [(0, 0, 0)]
+    active_palette = gradients.get('active') or inactive_palette
+    pixel_maps = []
+    for strip_entry in strip_entries:
+        led_count = strip_entry['strip'].numPixels()
+        inactive_pixels = [None] * led_count
+        active_pixels = [None] * led_count
+        assigned_by = [None] * led_count
+        for block_index, block in enumerate(strip_entry.get('blocks', [])):
+            start_index = max(0, min(led_count, block['start_index']))
+            end_index = max(start_index, min(led_count, block['end_index']))
+            color_index = block.get('color_index', block_index % len(inactive_palette))
+            color_index = max(0, min(len(inactive_palette) - 1, color_index))
+            inactive_color = inactive_palette[color_index]
+            active_color = active_palette[min(color_index, len(active_palette) - 1)]
+            for pixel_index in range(start_index, end_index):
+                if assigned_by[pixel_index] is not None:
+                    print(
+                        f"[display] {strip_entry['name']} LED {pixel_index} is covered by both "
+                        f"{assigned_by[pixel_index]} and {block['name']}; using {block['name']}."
+                    )
+                inactive_pixels[pixel_index] = inactive_color
+                active_pixels[pixel_index] = active_color
+                assigned_by[pixel_index] = block['name']
+        for pixel_index in range(led_count):
+            if inactive_pixels[pixel_index] is None:
+                print(f"[display] {strip_entry['name']} LED {pixel_index} is not covered by a block; forcing black.")
+                inactive_pixels[pixel_index] = (0, 0, 0)
+                active_pixels[pixel_index] = (0, 0, 0)
+            if inactive_pixels[pixel_index] == active_pixels[pixel_index]:
+                print(
+                    f"[display] {strip_entry['name']} LED {pixel_index} has the same inactive and active color "
+                    f"{inactive_pixels[pixel_index]}."
+                )
+        pixel_maps.append({
+            'name': strip_entry['name'],
+            'strip': strip_entry['strip'],
+            'inactive': inactive_pixels,
+            'active': active_pixels,
+        })
+    return pixel_maps
+
+
+def render_two_state_pixel_maps(pixel_maps, active=False, wait_ms=0):
+    state_key = 'active' if active else 'inactive'
+    for strip_entry in pixel_maps:
+        strip = strip_entry['strip']
+        pixels = strip_entry[state_key]
+        for pixel_index, (red_channel, green_channel, blue_channel) in enumerate(pixels):
+            strip.setPixelColor(pixel_index, Color(red_channel, green_channel, blue_channel))
+        strip.show()
+    if wait_ms:
+        time.sleep(wait_ms / 1000.0)
+
+
 def render_single_strip(strip, metadata, cleaned_values, gradients):
     gradients = gradients or {}
     inactive_palette = gradients.get('inactive') or [(0, 0, 0)]
@@ -708,9 +776,10 @@ def render_button_gradient(strip, gradients, active=False):
 
 
 class ButtonGradientState:
-    def __init__(self, mode='toggle', active_seconds=5.0):
+    def __init__(self, mode='toggle', active_seconds=5.0, event_debounce_seconds=1.0):
         self.mode = mode
         self.active_seconds = max(0.1, float(active_seconds or 0.1))
+        self.event_debounce_seconds = max(0.0, float(event_debounce_seconds or 0.0))
         self._active = False
         self._active_until = 0.0
         self._last_packet_key = None
@@ -723,6 +792,8 @@ class ButtonGradientState:
         now = time.monotonic()
         packet_key = (packet_id, event_code)
         with self._lock:
+            if now - self._last_event_at < self.event_debounce_seconds:
+                return None
             if packet_id is not None and packet_key == self._last_packet_key and now - self._last_event_at < 2.0:
                 return None
             if packet_id is None and now - self._last_event_at < 0.7:
@@ -863,6 +934,8 @@ async def _scan_shelly_button(state, args, stop_event):
         if event_code is None:
             return
         accepted_events = set(DEFAULT_BUTTON_EVENT_CODES)
+        if args.include_multi_click_events:
+            accepted_events.update((0x02, 0x03, 0x04))
         if args.include_hold_events:
             accepted_events.update((0x80, 0xFE))
         if event_code not in accepted_events:
@@ -1075,7 +1148,8 @@ if __name__ == '__main__':
     else:
         strip = None
         strip_entries = attach_strip_objects(physical_metadata)
-    button_state = ButtonGradientState(args.button_mode, args.active_seconds)
+    pixel_maps = [] if args.single_strip else build_two_state_pixel_maps(strip_entries, gradients)
+    button_state = ButtonGradientState(args.button_mode, args.active_seconds, args.event_debounce_seconds)
     stop_button_listener, button_thread = start_button_listener(button_state, args)
     try:
         while True:
@@ -1086,7 +1160,7 @@ if __name__ == '__main__':
             if args.single_strip:
                 render_button_gradient(strip, gradients, active)
             else:
-                render_physical_strip_blocks(strip_entries, gradients, active)
+                render_two_state_pixel_maps(pixel_maps, active)
     except KeyboardInterrupt:
         print("Loop interrupted; exiting.")
     finally:
