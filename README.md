@@ -59,7 +59,7 @@ source .env/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 ```
 
-`--system-site-packages` lets the virtualenv see Raspberry Pi OS packages such as `python3-smbus` and `python3-numpy`.
+`--system-site-packages` lets the virtualenv see Raspberry Pi OS packages such as `python3-smbus` and `python3-numpy`. Keep NumPy installed from apt on the Pi; the project requirements intentionally avoid installing a pip NumPy wheel over it.
 
 4. Install Python dependencies:
 
@@ -199,9 +199,10 @@ python -c "import ast,pathlib; ast.parse(pathlib.Path('complete/complete_v4.py')
 ## Troubleshooting
 
 - `ModuleNotFoundError: No module named 'smbus'`: install `python3-smbus` and enable I2C.
-- `ModuleNotFoundError: No module named 'numpy'`: install `python3-numpy` or add `numpy` to the active virtualenv.
+- `ModuleNotFoundError: No module named 'numpy'`: install `python3-numpy` and recreate the virtualenv with `--system-site-packages`.
+- `ImportError: libopenblas.so.0`: install `libopenblas0`, then remove any pip-installed NumPy from the virtualenv so Python uses apt's `python3-numpy`.
 - `ws2811_init failed`: check root/capability access for `rpi_ws281x`.
-- No temperature sensor found: verify 1-Wire is enabled and the probe appears under `/sys/bus/w1/devices/`.
+- No temperature sensor found: verify 1-Wire is enabled, reboot after `sudo raspi-config nonint do_onewire 0`, and confirm the probe appears under `/sys/bus/w1/devices/28*/w1_slave`.
 
 ## License
 

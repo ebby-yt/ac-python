@@ -49,6 +49,19 @@ WantedBy=multi-user.target
 
 Adjust `User`, `WorkingDirectory`, virtualenv path, and optional CLI flags for your deployment. Add `--single-strip` to `ExecStart` only when debugging the legacy one-strip renderer.
 
+For `complete/button_v4.py`, start after the Bluetooth service and use the full systemd
+unit name:
+
+```ini
+[Unit]
+Description=AC Wearable Button V4 Loop
+After=bluetooth.service
+Wants=bluetooth.service
+```
+
+Do not use `After=bluetooth`; systemd will log `Failed to add dependency on bluetooth,
+ignoring: Invalid argument` and skip that dependency.
+
 ## 3. Enable And Monitor
 
 ```bash

@@ -48,6 +48,7 @@ BUTTON_EVENT_NAMES = {
     0x80: 'hold',
     0xFE: 'hold',
 }
+DEFAULT_BUTTON_EVENT_CODES = (0x01, 0x02, 0x03, 0x04)
 
 # MIN/MAX values initalization
 TEMP_MIN = 0
@@ -202,6 +203,11 @@ def parse_args():
         '--scan-all-debug',
         action='store_true',
         help='Print nearby BLE advertisements, even when they are not recognized as the button.',
+    )
+    parser.add_argument(
+        '--include-hold-events',
+        action='store_true',
+        help='Also let hold advertisements toggle/activate the gradient.',
     )
     return parser.parse_args()
 
@@ -710,6 +716,7 @@ class ButtonGradientState:
         self._last_packet_key = None
         self._last_event_at = 0.0
         self._lock = threading.Lock()
+        self._event_received = threading.Event()
 
     def handle_event(self, event_code, packet_id=None):
         event_name = BUTTON_EVENT_NAMES.get(event_code, f'event_{event_code}')
@@ -727,6 +734,7 @@ class ButtonGradientState:
                 self._active_until = now + self.active_seconds
             else:
                 self._active = not self._active
+            self._event_received.set()
             return event_name, self._active
 
     def is_active(self):
@@ -734,6 +742,12 @@ class ButtonGradientState:
             if self.mode == 'momentary' and self._active and time.monotonic() >= self._active_until:
                 self._active = False
             return self._active
+
+    def wait_for_event(self, timeout=0.5):
+        event_received = self._event_received.wait(timeout)
+        if event_received:
+            self._event_received.clear()
+        return event_received
 
 
 def _device_matches(device, advertisement_data, event_code=None, button_address='', button_name=''):
@@ -847,6 +861,11 @@ async def _scan_shelly_button(state, args, stop_event):
         if args.scan_debug and event_code is not None:
             print(_format_debug_advertisement(device, advertisement_data, event_code, packet_id))
         if event_code is None:
+            return
+        accepted_events = set(DEFAULT_BUTTON_EVENT_CODES)
+        if args.include_hold_events:
+            accepted_events.update((0x80, 0xFE))
+        if event_code not in accepted_events:
             return
         result = state.handle_event(event_code, packet_id)
         if result:
@@ -1058,18 +1077,16 @@ if __name__ == '__main__':
         strip_entries = attach_strip_objects(physical_metadata)
     button_state = ButtonGradientState(args.button_mode, args.active_seconds)
     stop_button_listener, button_thread = start_button_listener(button_state, args)
-    last_active = None
     try:
         while True:
+            if not button_state.wait_for_event():
+                continue
             active = button_state.is_active()
-            if active != last_active:
-                print(f"[display] Button gradient active={active}")
-                last_active = active
+            print(f"[display] Button gradient active={active}")
             if args.single_strip:
                 render_button_gradient(strip, gradients, active)
             else:
                 render_physical_strip_blocks(strip_entries, gradients, active)
-            time.sleep(0.1)
     except KeyboardInterrupt:
         print("Loop interrupted; exiting.")
     finally:
